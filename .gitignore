@@ -1,0 +1,4 @@
+/test
+/train
+/processed*
+/yolo_weights
