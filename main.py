@@ -1,12 +1,16 @@
 import numpy as np
 import torch
+import os
 from PIL import Image
 from datasets import load_dataset
 from datasets import load_metric
 from transformers import AutoImageProcessor, AutoModelForImageClassification, TrainingArguments, Trainer, pipeline
-from torchvision import Compose, Normalize, ToTensor
+from torchvision.transforms import Compose, Normalize, ToTensor
 
-def fine_tune(model_checkpoint="google/vit-large-patch16-224-in21k", batch_size=8):
+os.environ["HF_HOME"] = "/scratch/e1310988"
+os.environ['HF_DATASETS_CACHE'] = "/scratch/e1310988"
+
+def fine_tune(model_checkpoint="google/vit-large-patch16-224-in21k", batch_size=32):
 
     dataset = load_dataset("imagefolder", data_dir="processed_train", drop_labels=False)
     metric = load_metric("accuracy")
@@ -19,10 +23,10 @@ def fine_tune(model_checkpoint="google/vit-large-patch16-224-in21k", batch_size=
 
     processor = AutoImageProcessor.from_pretrained(model_checkpoint)
 
-    transforms = Compose([ToTensor(), Normalize(mean=processor.mean, std=processor.std)])
+    transforms = Compose([ToTensor(), Normalize(mean=processor.image_mean, std=processor.image_std)])
 
     def preprocess_images(examples):
-        examples['pixel_values'] = [transforms(image=image)["image"] for image in examples["image"]]
+        examples['pixel_values'] = [transforms(image.convert("RGB")) for image in examples["image"]]
         return examples
 
     splits = dataset["train"].train_test_split(test_size=0.1)
@@ -78,14 +82,12 @@ def fine_tune(model_checkpoint="google/vit-large-patch16-224-in21k", batch_size=
     )
 
     train_results = trainer.train()
-    # rest is optional but nice to have
     trainer.save_model()
     trainer.log_metrics("train", train_results.metrics)
     trainer.save_metrics("train", train_results.metrics)
     trainer.save_state()
 
     metrics = trainer.evaluate()
-    # some nice to haves:
     trainer.log_metrics("eval", metrics)
     trainer.save_metrics("eval", metrics)
 
@@ -108,4 +110,6 @@ def inference(repo_name, image_path):
 
     return predicted_class
 
+if __name__ == "__main__":
+    model = fine_tune()
 
