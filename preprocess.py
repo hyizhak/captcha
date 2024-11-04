@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+from tqdm import tqdm
+import shutil
 
 # Paths for input and output directories
 input_dir = "train"
@@ -43,7 +45,7 @@ def remove_lines(image):
                 count += 1
 
             # If the count is low, consider it noise and set it to a new value (e.g., white)
-            if count <= 3 and count > 0:
+            if pixel_value == 0 and count <= 3 and count > 0:
                 result[y, x] = 255  # Set to white to remove interference
 
     return result
@@ -54,10 +56,16 @@ def tokenize_contours(image):
     
     # Filter and sort contours
     filtered_contours = []
+    areas = []
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
-        # Filter out small contours by size
-        if w * h > 100 and w > 3 and h > 3:
+        areas.append(w * h)
+
+    # Filter contours based on area
+    median_area = np.max(areas)
+    for contour, area in zip(contours, areas):
+        x, y, w, h = cv2.boundingRect(contour)
+        if area > median_area / 10:
             filtered_contours.append((contour, x, y, w, h))
     
     # Sort contours from left to right based on x-coordinate
@@ -147,6 +155,10 @@ def process_image(file_path, file_name, charcount, tokenizor, output_dir):
     # Invert the image to make the background white and the letters black
     processed_img = cv2.bitwise_not(processed_img)
 
+    # Apply morphological closing to connect small gaps within characters
+    kernel = np.ones((3, 3), np.uint8)  # Adjust kernel size based on your captcha structure
+    processed_img = cv2.morphologyEx(processed_img, cv2.MORPH_CLOSE, kernel)
+
     # Apply dilation to connect nearby parts of letters
     kernel = np.ones((2, 2), np.uint8)  # Adjust kernel size based on your captcha structure
     dilated_img = cv2.dilate(processed_img, kernel, iterations=1)
@@ -181,9 +193,9 @@ def process_image(file_path, file_name, charcount, tokenizor, output_dir):
                         break
 
     if len(captcha_text) != len(filtered_contours):
-        plt.imshow(dilated_img, cmap="gray")
-        plt.show()
-        print(f"Skipping {file_name} due to length mismatch: {len(captcha_text)} != {len(filtered_contours)}")
+        # plt.imshow(dilated_img, cmap="gray")
+        # plt.show()
+        # print(f"Skipping {file_name} due to length mismatch: {len(captcha_text)} != {len(filtered_contours)}")
         return
     
     for i, (contour, x, y, w, h) in enumerate(filtered_contours):
@@ -195,15 +207,42 @@ def process_image(file_path, file_name, charcount, tokenizor, output_dir):
         charcount[captcha_text[i]] = charcount.get(captcha_text[i], 0) + 1
         char_filename = f"{captcha_text[i]}_{charcount[captcha_text[i]]}.png"
         cv2.imwrite(os.path.join(output_dir, char_filename), char_img)
+
+def prepare_image_folder(source, destination):
+    # create the main folder if it doesn't exist
+    os.makedirs(destination, exist_ok=True)
+
+    # create 36 subfolders with names 0-9 and a-z
+    folders = [str(i) for i in range(0, 10)] + [chr(i) for i in range(ord('a'), ord('z') + 1)]
+    for folder in folders:
+        os.makedirs(os.path.join(destination, folder), exist_ok=True)
+
+    # iterate through all png files in the source folder and move them to the appropriate subfolder
+    for file_name in os.listdir(source):
+        if file_name.endswith('.png'):
+            # get the first character of the file name and convert it to lowercase
+            first_char = file_name[0].lower()
+            
+            # check if the character matches a folder name
+            if first_char in folders:
+                # move the file to the corresponding subfolder
+                src_path = os.path.join(source, file_name)
+                dest_path = os.path.join(destination, first_char, file_name)
+                shutil.move(src_path, dest_path)
+
+    print("images have been successfully distributed into their respective folders!")
     
 
 if __name__ == "__main__":
     # Process each file in the input directory
-    tokenizer = 'projection'
+    tokenizer = 'contours'
+    # tokenizer = 'projection'
     output_dir = f"{output_dir}_{tokenizer}"
     charcount = {}
-    for filename in os.listdir(input_dir):
+    for filename in tqdm(os.listdir(input_dir)):
         if filename.endswith(".png"):
-            process_image(os.path.join(input_dir, filename), filename, charcount)
+            process_image(os.path.join(input_dir, filename), filename, charcount, tokenizer, output_dir)
 
-    print(charcount['total'] / len(os.listdir(output_dir)))
+    print(len(os.listdir(output_dir)) / charcount['total'])
+
+    prepare_image_folder(output_dir, f'processed_train_{tokenizer}')

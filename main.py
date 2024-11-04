@@ -10,9 +10,9 @@ from torchvision.transforms import Compose, Normalize, ToTensor
 os.environ["HF_HOME"] = "/scratch/e1310988"
 os.environ['HF_DATASETS_CACHE'] = "/scratch/e1310988"
 
-def fine_tune(model_checkpoint="google/vit-large-patch16-224-in21k", batch_size=32):
+def fine_tune(model_checkpoint="vit-large-patch16-224-in21k-finetuned-captcha", batch_size=32):
 
-    dataset = load_dataset("imagefolder", data_dir="processed_train", drop_labels=False)
+    dataset = load_dataset("imagefolder", data_dir="processed_train_contours", drop_labels=False)
     metric = load_metric("accuracy")
 
     labels = dataset["train"].features["label"].names
@@ -37,7 +37,7 @@ def fine_tune(model_checkpoint="google/vit-large-patch16-224-in21k", batch_size=
     val_ds.set_transform(preprocess_images)
 
     model = AutoModelForImageClassification.from_pretrained(
-        model_checkpoint, 
+        model_checkpoint,
         label2id=label2id,
         id2label=id2label,
         ignore_mismatched_sizes = True, 
@@ -46,7 +46,7 @@ def fine_tune(model_checkpoint="google/vit-large-patch16-224-in21k", batch_size=
     model_name = model_checkpoint.split("/")[-1]
 
     args = TrainingArguments(
-        f"{model_name}-finetuned-captcha",
+        f"{model_name}",
         remove_unused_columns=False,
         evaluation_strategy = "epoch",
         save_strategy = "epoch",
@@ -54,9 +54,9 @@ def fine_tune(model_checkpoint="google/vit-large-patch16-224-in21k", batch_size=
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=4,
         per_device_eval_batch_size=batch_size,
-        num_train_epochs=3,
+        num_train_epochs=20,
         warmup_ratio=0.1,
-        logging_steps=10,
+        logging_steps=100,
         load_best_model_at_end=True,
         metric_for_best_model="accuracy",
     )
@@ -81,7 +81,7 @@ def fine_tune(model_checkpoint="google/vit-large-patch16-224-in21k", batch_size=
         data_collator=collate_fn,
     )
 
-    train_results = trainer.train()
+    train_results = trainer.train(resume_from_checkpoint=True)
     trainer.save_model()
     trainer.log_metrics("train", train_results.metrics)
     trainer.save_metrics("train", train_results.metrics)
