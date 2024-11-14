@@ -16,16 +16,16 @@ import shutil
 
 # Paths for input and output directories
 # Change to your own path
-input_dir = "/content/drive/MyDrive/cs4243_group_folder/code/mini_project/train"
-output_dir = "/content/drive/MyDrive/cs4243_group_folder/code/processed"
+# input_dir = "/content/drive/MyDrive/cs4243_group_folder/code/mini_project/train"
+# output_dir = "/content/drive/MyDrive/cs4243_group_folder/code/processed"
 global fail
 global total
 fail = 0
 total = 0
 
 # Ensure output directory exists
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
+# if not os.path.exists(output_dir):
+#     os.makedirs(output_dir)
 
 """Auxilliary Functions"""
 
@@ -296,7 +296,7 @@ def select_best_segmentation(segments_list):
 
 """Image Processing Function:"""
 
-def process_image(file_path, file_name, charcount, tokenizor, output_dir):
+def process_image(file_path, file_name, charcount={}, tokenizor='contours', output_dir=None):
     global total, fail
 
     # Common load and preprocessing
@@ -452,6 +452,8 @@ def process_image(file_path, file_name, charcount, tokenizor, output_dir):
 
     filtered_contours = select_best_segmentation(contour_lists)
 
+    segmentation = []
+
     for i, (x, y, w, h) in enumerate(filtered_contours):
         # include a small margin outside the identified text to avoid important information at boundaries being cropped
         MARGIN = 2
@@ -469,7 +471,12 @@ def process_image(file_path, file_name, charcount, tokenizor, output_dir):
         # Save each character with the naming convention, mark the number of the character
         # charcount[captcha_text[i]] = charcount.get(captcha_text[i], 0) + 1
         char_filename = f"{captcha_text[i]}_{i}_{captcha_text}.png"
-        cv2.imwrite(os.path.join(output_dir, char_filename), char_img)
+        if output_dir:
+            cv2.imwrite(os.path.join(output_dir, char_filename), char_img)
+
+        segmentation.append(char_img)
+
+    return segmentation
 
 def prepare_image_folder(source, destination):
     # Ensure output directory exists
@@ -483,7 +490,9 @@ def prepare_image_folder(source, destination):
             # Split the filename to extract {id}
             parts = filename.split('_')
             if len(parts) >= 3:
-                id_part = parts[2].split('.')[0]  # Extract {id} without the file extension
+                # id_part = parts[2].split('.')[0]  # Extract {id} without the file extension
+
+                id_part = parts[0]  # Extract the figure
 
                 # Create a subfolder named by {id} if it does not exist
                 id_folder_path = os.path.join(destination, id_part)
@@ -498,23 +507,23 @@ def prepare_image_folder(source, destination):
 
 """Tester:"""
 
-input_dir = "/content/drive/MyDrive/cs4243_group_folder/code/mini_project/train"
-# filename = "2bjj1pos-0.png"
-# filename = "ngt7gmz-0.png"
-# filename = "lva2bqcz-0.png"
-# filename = "n9t72-0.png"
-# filename = "2mo9qj39-0.png"
-# filename = "wxw2g9o-0.png"
-# filename = "xun9-0.png"
-# filename = "be1nxzo-0.png"
-# filename = "7d02g-0.png"
-# filename = "4wtr-0.png"
-filename = "sfaqe0-0.png"
+# input_dir = "/content/drive/MyDrive/cs4243_group_folder/code/mini_project/train"
+# # filename = "2bjj1pos-0.png"
+# # filename = "ngt7gmz-0.png"
+# # filename = "lva2bqcz-0.png"
+# # filename = "n9t72-0.png"
+# # filename = "2mo9qj39-0.png"
+# # filename = "wxw2g9o-0.png"
+# # filename = "xun9-0.png"
+# # filename = "be1nxzo-0.png"
+# # filename = "7d02g-0.png"
+# # filename = "4wtr-0.png"
+# filename = "sfaqe0-0.png"
 
-charcount = {}
-tokenizer = 'contours'
+# charcount = {}
+# tokenizer = 'contours'
 
-process_image(os.path.join(input_dir, filename), filename, charcount, tokenizer, output_dir)
+# process_image(os.path.join(input_dir, filename), filename, charcount, tokenizer, output_dir)
 
 """Main function:"""
 
@@ -523,25 +532,26 @@ if __name__ == "__main__":
     tokenizer = 'contours'
     # tokenizer = 'projection'
 
-    input_dir = "/content/drive/MyDrive/cs4243_group_folder/code/mini_project/train"
+    input_dir = "./train"
+    output_dir = "./processed"
     output_dir = f"{output_dir}_{tokenizer}"
     # Ensure output directory exists
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    charcount = {}
-    for filename in tqdm(os.listdir(input_dir)):
-        if filename.endswith(".png"):
-            process_image(os.path.join(input_dir, filename), filename, charcount, tokenizer, output_dir)
+    # charcount = {}
+    # for filename in tqdm(os.listdir(input_dir)):
+    #     if filename.endswith(".png"):
+    #         process_image(os.path.join(input_dir, filename), filename, charcount, tokenizer, output_dir)
 
-    print(f"Number of failed cases:{fail}")
-    percentage = fail / total
-    print(f"Fail rate:{percentage}")
+    # print(f"Number of failed cases:{fail}")
+    # percentage = fail / total
+    # print(f"Fail rate:{percentage}")
 
     # Google Drive may fail to batch-process many files
     # Back-up source before running this cell, or run this cell locally.
-    source = "/content/drive/MyDrive/cs4243_group_folder/code/processed_contours_contours/"
-    destination = "/content/drive/MyDrive/cs4243_group_folder/code/train_segmented/"
+    source = output_dir
+    destination = f"{output_dir}_train"
 
     prepare_image_folder(source, destination)
 

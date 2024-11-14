@@ -6,13 +6,14 @@ from datasets import load_dataset
 from datasets import load_metric
 from transformers import AutoImageProcessor, AutoModelForImageClassification, TrainingArguments, Trainer, pipeline
 from torchvision.transforms import Compose, Normalize, ToTensor
+from preprocess import process_image
 
 os.environ["HF_HOME"] = "/scratch/e1310988"
 os.environ['HF_DATASETS_CACHE'] = "/scratch/e1310988"
 
 def fine_tune(model_checkpoint="vit-large-patch16-224-in21k-finetuned-captcha", batch_size=32):
 
-    dataset = load_dataset("imagefolder", data_dir="processed_train_contours", drop_labels=False)
+    dataset = load_dataset("imagefolder", data_dir="processed_contours_train", drop_labels=False)
     metric = load_metric("accuracy")
 
     labels = dataset["train"].features["label"].names
@@ -99,16 +100,30 @@ def inference(repo_name, image_path):
     pipe = pipeline("image-classification", 
             model=model,
             feature_extractor=image_processor)
+    
+    file_name = image_path.split("/")[-1]
 
-    image = Image.open(image_path)
+    images = process_image(image_path, file_name)
 
-    encoding = image_processor(images=image, return_tensors="pt")
-    outputs = model(**encoding)
-    logits = outputs.logits
-    predicted_class_idx = torch.argmax(logits).item()
-    predicted_class = model.config.id2label[predicted_class_idx]
+    images = [Image.fromarray(image) for image in images]
 
-    return predicted_class
+    # encoding = image_processor(images=image, return_tensors="pt")
+    # outputs = model(**encoding)
+    # logits = outputs.logits
+    # predicted_class_idx = torch.argmax(logits).item()
+    # predicted_class = model.config.id2label[predicted_class_idx]
+
+    preds = pipe(images)
+
+    preds = [pred['label'] for pred in preds]
+
+    correct = 0
+    file_name = file_name.split(".")[0]
+    for i, pred in enumerate(preds):
+        if i < len(file_name) and pred == file_name[i]:
+            correct += 1
+
+    return preds, correct, correct/len(file_name)
 
 if __name__ == "__main__":
     model = fine_tune()
