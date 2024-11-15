@@ -1,5 +1,8 @@
 /test
 /train
 /processed*
+/generated_captcha
 /yolo_weights
 *.safetensors
+*.pt
+__pycache__

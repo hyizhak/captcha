@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import os
+from tqdm import tqdm
 from PIL import Image
 from datasets import load_dataset
 from datasets import load_metric
@@ -11,7 +12,7 @@ from preprocess import process_image
 os.environ["HF_HOME"] = "/scratch/e1310988"
 os.environ['HF_DATASETS_CACHE'] = "/scratch/e1310988"
 
-def fine_tune(model_checkpoint="vit-large-patch16-224-in21k-finetuned-captcha", batch_size=32):
+def fine_tune(model_checkpoint="google/vit-large-patch16-224-in21k", batch_size=32):
 
     dataset = load_dataset("imagefolder", data_dir="processed_contours_train", drop_labels=False)
     metric = load_metric("accuracy")
@@ -47,7 +48,7 @@ def fine_tune(model_checkpoint="vit-large-patch16-224-in21k-finetuned-captcha", 
     model_name = model_checkpoint.split("/")[-1]
 
     args = TrainingArguments(
-        f"{model_name}",
+        f"{model_name}-captcha",
         remove_unused_columns=False,
         evaluation_strategy = "epoch",
         save_strategy = "epoch",
@@ -55,7 +56,7 @@ def fine_tune(model_checkpoint="vit-large-patch16-224-in21k-finetuned-captcha", 
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=4,
         per_device_eval_batch_size=batch_size,
-        num_train_epochs=20,
+        num_train_epochs=40,
         warmup_ratio=0.1,
         logging_steps=100,
         load_best_model_at_end=True,
@@ -82,7 +83,7 @@ def fine_tune(model_checkpoint="vit-large-patch16-224-in21k-finetuned-captcha", 
         data_collator=collate_fn,
     )
 
-    train_results = trainer.train(resume_from_checkpoint=True)
+    train_results = trainer.train()
     trainer.save_model()
     trainer.log_metrics("train", train_results.metrics)
     trainer.save_metrics("train", train_results.metrics)
@@ -99,7 +100,8 @@ def inference(repo_name, image_path):
     model = AutoModelForImageClassification.from_pretrained(repo_name)
     pipe = pipeline("image-classification", 
             model=model,
-            feature_extractor=image_processor)
+            feature_extractor=image_processor,
+            device=0)
     
     file_name = image_path.split("/")[-1]
 
@@ -115,16 +117,33 @@ def inference(repo_name, image_path):
 
     preds = pipe(images)
 
-    preds = [pred['label'] for pred in preds]
+    # print(preds)
+
+    preds = [pred[0]['label'] for pred in preds]
 
     correct = 0
-    file_name = file_name.split(".")[0]
+    file_name = file_name.split("-")[0]
     for i, pred in enumerate(preds):
         if i < len(file_name) and pred == file_name[i]:
             correct += 1
 
-    return preds, correct, correct/len(file_name)
+    return preds, correct, len(file_name), correct/len(file_name)
 
 if __name__ == "__main__":
-    model = fine_tune()
+    # model = fine_tune()
+
+    for repo_name in ["vit-large-patch16-224-in21k-captcha", "vit-large-patch16-224-in21k-finetuned-captcha"]:
+        for image_folder in ['/scratch/e1310988/cv_proj/test', '/scratch/e1310988/cv_proj/generated_captcha']:
+            acc = []
+            correct = 0
+            total = 0
+            for image_path in os.listdir(image_folder):
+                _, correct_count, captcha_len, accuracy = inference(repo_name, image_folder + "/" + image_path)
+                acc.append(accuracy)
+                correct += correct_count
+                total += captcha_len
+
+            print(f"Model: {repo_name}")
+            print(f"data: {image_folder}")
+            print(f"Average Accuracy: {sum(acc)/len(acc)}, Single Character Accuracy: {correct/total}")
 
